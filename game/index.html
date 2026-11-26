@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyline Courier — a bush-plane flight game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2230;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #f5f2e8; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #hud.hidden { display: none; }
+  .hud-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; }
+  .hud-box { background: rgba(12, 18, 28, 0.72); border: 1px solid rgba(245,242,232,0.35);
+    border-radius: 8px; padding: 6px 14px; text-align: center; min-width: 92px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+  .hud-box.wide { min-width: 110px; }
+  .label { display: block; font-size: 10px; letter-spacing: 2px; color: #ffd23e; opacity: 0.9; }
+  .value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .unit { font-size: 12px; color: #cfc8b8; margin-left: 3px; }
+  .hud-compass { position: absolute; top: 74px; left: 50%; transform: translateX(-50%);
+    width: 360px; height: 26px; overflow: hidden; background: rgba(12,18,28,0.55);
+    border: 1px solid rgba(245,242,232,0.25); border-radius: 6px; }
+  .compass-tape { display: flex; height: 100%; will-change: transform; }
+  .compass-tape .tick { flex: 0 0 40px; text-align: center; font-size: 12px; line-height: 26px;
+    color: #cfc8b8; font-variant-numeric: tabular-nums; }
+  .compass-tape .tick.major { color: #f5f2e8; font-weight: 700; }
+  .compass-needle { position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    color: #ffd23e; font-size: 12px; line-height: 12px; }
+  .hud-left { position: absolute; left: 16px; top: 110px; display: flex; flex-direction: column; gap: 10px; }
+  #attitude { border-radius: 50%; border: 2px solid rgba(245,242,232,0.6);
+    background: #22354f; box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+  .gauge { background: rgba(12,18,28,0.72); border: 1px solid rgba(245,242,232,0.25);
+    border-radius: 8px; padding: 7px 10px; width: 168px; }
+  .gauge .label { margin-bottom: 4px; }
+  .bar { height: 10px; background: rgba(255,255,255,0.14); border-radius: 5px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 5px; transition: width 0.15s linear; }
+  .fill.thr { background: #4da3ff; width: 0%; }
+  .fill.fuel { background: #2fd47a; width: 100%; }
+  .fill.fuel.low { background: #ff5a3c; }
+  .fill.dmg { background: #ffb020; width: 0%; }
+  .gval { float: right; font-size: 12px; font-weight: 700; margin-top: -16px; }
+  .switches { font-size: 11px; letter-spacing: 1px; color: #cfc8b8;
+    background: rgba(12,18,28,0.72); border: 1px solid rgba(245,242,232,0.25);
+    border-radius: 8px; padding: 7px 10px; width: 168px; }
+  .hud-right { position: absolute; right: 16px; top: 14px; display: flex; flex-direction: column;
+    gap: 10px; align-items: flex-end; }
+  .objective { max-width: 300px; text-align: right; font-size: 15px; font-weight: 600;
+    background: rgba(12,18,28,0.72); border: 1px solid rgba(255,210,62,0.55);
+    border-radius: 8px; padding: 9px 12px; line-height: 1.35; }
+  .warnings { position: absolute; top: 118px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; }
+  .warn { background: #c81e1e; color: #fff; font-weight: 800; letter-spacing: 2px; font-size: 13px;
+    padding: 5px 12px; border-radius: 6px; animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+  .toast { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%) translateY(8px);
+    background: rgba(12,18,28,0.85); border: 1px solid rgba(255,210,62,0.7); color: #ffe9a8;
+    font-size: 17px; font-weight: 600; padding: 10px 20px; border-radius: 10px;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .help { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(245,242,232,0.75); background: rgba(12,18,28,0.5);
+    padding: 5px 12px; border-radius: 6px; white-space: nowrap; }
+
+  /* ---------- Screens ---------- */
+  #screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
+    justify-content: center; background: rgba(10, 16, 26, 0.45); }
+  #screen.hidden { display: none; }
+  .panel { background: rgba(14, 22, 34, 0.92); border: 1px solid rgba(255,210,62,0.45);
+    border-radius: 16px; padding: 30px 38px; max-width: 640px; text-align: center;
+    box-shadow: 0 12px 50px rgba(0,0,0,0.5); }
+  .panel h1 { margin: 0 0 6px; font-size: 40px; letter-spacing: 4px; color: #ffd23e; }
+  .panel h1.win { color: #2fd47a; }
+  .panel h1.lose { color: #ff5a3c; }
+  .sub { margin: 4px 0 18px; font-size: 16px; color: #d8d2c2; }
+  .endline { font-size: 17px; margin: 8px 0; }
+  .stats { display: flex; gap: 22px; justify-content: center; margin: 18px 0 6px; }
+  .stats div { display: flex; flex-direction: column; gap: 2px; }
+  .stats span { font-size: 11px; letter-spacing: 2px; color: #ffd23e; }
+  .stats b { font-size: 24px; font-variant-numeric: tabular-nums; }
+  .missions { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 16px; }
+  .mission { pointer-events: auto; cursor: pointer; text-align: left;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(245,242,232,0.3);
+    border-radius: 10px; padding: 12px 16px; color: #f5f2e8; display: grid;
+    grid-template-columns: 34px 1fr auto; grid-template-rows: auto auto; column-gap: 12px; }
+  .mission:hover { background: rgba(255,210,62,0.16); border-color: #ffd23e; }
+  .mnum { grid-row: 1 / 3; font-size: 26px; font-weight: 800; color: #ffd23e; align-self: center; }
+  .mname { font-size: 19px; font-weight: 700; }
+  .mtag { font-size: 12px; color: #ffd23e; align-self: center; letter-spacing: 1px; }
+  .mbrief { grid-column: 2 / 4; font-size: 13.5px; color: #cfc8b8; line-height: 1.4; }
+  .keys { font-size: 13px; color: #cfc8b8; margin: 12px 0 0; line-height: 1.6; }
+  .foot { font-size: 12.5px; color: #9a937f; margin: 8px 0 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Skyline Courier: fly a bush plane through rings, land on runways, deliver parcels"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="hud"></div>
+<div id="screen"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
